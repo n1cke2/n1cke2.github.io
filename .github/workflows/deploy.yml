@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+# 触发条件
+on:
+  push:
+    branches: [main]      # 每次推送到 main
+  workflow_dispatch:      # 也允许在网页上手动点按钮触发
+
+# 权限三件套，缺一不可
+permissions:
+  contents: read          # 读代码
+  pages: write            # 写 Pages
+  id-token: write         # 用 OIDC 向 Pages 证明身份
+
+# 同一时刻只跑一个部署，避免并发打架
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ---------- 任务 1：构建 ----------
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 安装 Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建 Astro 站点
+        run: npm run build
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+  # ---------- 任务 2：部署（必须等 build 成功）----------
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
